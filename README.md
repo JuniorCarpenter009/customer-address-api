@@ -17,6 +17,8 @@ La solución permite registrar clientes pertenecientes a la empresa y asociarles
 - Jakarta Validation
 - Swagger / OpenAPI
 - Maven
+- JUnit 5
+- MockMvc
 
 ---
 
@@ -40,7 +42,7 @@ El objetivo de esta solución es cumplir con el siguiente requerimiento:
 
 > Se desea tener el control de todos los clientes pertenecientes a la empresa OrionTek, donde cada cliente puede tener N cantidad de direcciones.
 
-Para resolverlo, se desarrolló una API Backend utilizando Java, Spring Boot y PostgreSQL.
+Para resolverlo, se desarrolló una API Backend utilizando **Java**, **Spring Boot** y **PostgreSQL**, aplicando una arquitectura por capas y una implementación simple de **CQRS**.
 
 ---
 
@@ -48,19 +50,45 @@ Para resolverlo, se desarrolló una API Backend utilizando Java, Spring Boot y P
 
 El proyecto está organizado bajo una arquitectura por capas, separando responsabilidades para facilitar el mantenimiento, lectura y escalabilidad del código.
 
+Además, la capa de aplicación aplica **CQRS**, separando las operaciones de escritura en **Commands** y las operaciones de lectura en **Queries**.
+
 ```txt
 src/main/java/com/oriontek/customer_api
 │
 ├── application
-│   ├── dto
+│   ├── commands
 │   │   ├── customer
-│   │   │   └── CreateCustomerRequest.java
+│   │   │   ├── CreateCustomerCommand.java
+│   │   │   ├── CreateCustomerCommandHandler.java
+│   │   │   ├── UpdateCustomerCommand.java
+│   │   │   ├── UpdateCustomerCommandHandler.java
+│   │   │   ├── DeleteCustomerCommand.java
+│   │   │   └── DeleteCustomerCommandHandler.java
+│   │   │
 │   │   └── address
-│   │       └── CreateAddressRequest.java
+│   │       ├── CreateAddressCommand.java
+│   │       ├── CreateAddressCommandHandler.java
+│   │       ├── UpdateAddressCommand.java
+│   │       ├── UpdateAddressCommandHandler.java
+│   │       ├── DeleteAddressCommand.java
+│   │       └── DeleteAddressCommandHandler.java
 │   │
-│   └── services
-│       ├── CustomerService.java
-│       └── AddressService.java
+│   ├── queries
+│   │   ├── customer
+│   │   │   ├── GetAllCustomersQuery.java
+│   │   │   ├── GetAllCustomersQueryHandler.java
+│   │   │   ├── GetCustomerByIdQuery.java
+│   │   │   └── GetCustomerByIdQueryHandler.java
+│   │   │
+│   │   └── address
+│   │       ├── GetAddressesByCustomerIdQuery.java
+│   │       └── GetAddressesByCustomerIdQueryHandler.java
+│   │
+│   └── dto
+│       ├── customer
+│       │   └── CreateCustomerRequest.java
+│       └── address
+│           └── CreateAddressRequest.java
 │
 ├── domain
 │   └── entities
@@ -103,29 +131,45 @@ Ejemplo:
 
 Responsabilidades:
 
-- Exponer endpoints.
-- Recibir requests.
-- Validar entradas.
-- Delegar operaciones a los servicios.
+- Exponer endpoints REST.
+- Recibir requests HTTP.
+- Validar entradas usando DTOs.
+- Delegar la operación al CommandHandler o QueryHandler correspondiente.
+- Retornar la respuesta al cliente.
 
 ---
 
 ### Application
 
-Contiene la lógica principal de negocio.
+Contiene los casos de uso de la aplicación implementados mediante **CQRS**.
 
-Ejemplo:
+Esta capa se divide en:
 
-- `CustomerService`
-- `AddressService`
+- `commands`: operaciones que modifican el estado del sistema.
+- `queries`: operaciones que consultan información.
+- `dto`: objetos utilizados como contratos de entrada.
+
+Ejemplo de Commands:
+
+- `CreateCustomerCommand`
+- `UpdateCustomerCommand`
+- `DeleteCustomerCommand`
+- `CreateAddressCommand`
+- `UpdateAddressCommand`
+- `DeleteAddressCommand`
+
+Ejemplo de Queries:
+
+- `GetAllCustomersQuery`
+- `GetCustomerByIdQuery`
+- `GetAddressesByCustomerIdQuery`
 
 Responsabilidades:
 
-- Crear clientes.
-- Actualizar clientes.
-- Crear direcciones.
-- Validar que una dirección pertenezca a un cliente.
+- Ejecutar casos de uso específicos.
+- Validar reglas de negocio.
 - Coordinar operaciones con los repositorios.
+- Separar lectura y escritura para mejorar la claridad del código.
 
 ---
 
@@ -180,7 +224,174 @@ Responsabilidades:
 
 ---
 
+## CQRS
+
+El proyecto utiliza una implementación simple de **CQRS**.
+
+CQRS significa:
+
+```txt
+Command Query Responsibility Segregation
+```
+
+Esto consiste en separar las operaciones que modifican datos de las operaciones que consultan datos.
+
+---
+
+### Commands
+
+Los **Commands** representan acciones que cambian el estado del sistema.
+
+Ejemplos:
+
+```txt
+CreateCustomerCommand
+UpdateCustomerCommand
+DeleteCustomerCommand
+CreateAddressCommand
+UpdateAddressCommand
+DeleteAddressCommand
+```
+
+Cada Command tiene su respectivo Handler.
+
+Ejemplo:
+
+```txt
+CreateCustomerCommand -> CreateCustomerCommandHandler
+```
+
+---
+
+### Queries
+
+Las **Queries** representan operaciones de lectura.
+
+Ejemplos:
+
+```txt
+GetAllCustomersQuery
+GetCustomerByIdQuery
+GetAddressesByCustomerIdQuery
+```
+
+Cada Query tiene su respectivo Handler.
+
+Ejemplo:
+
+```txt
+GetCustomerByIdQuery -> GetCustomerByIdQueryHandler
+```
+
+---
+
+### Flujo CQRS usado en el proyecto
+
+```txt
+HTTP Request
+    |
+    v
+Controller
+    |
+    v
+Command / Query
+    |
+    v
+CommandHandler / QueryHandler
+    |
+    v
+Repository
+    |
+    v
+PostgreSQL
+```
+
+---
+
+### Ejemplo de flujo: crear cliente
+
+```txt
+POST /api/customers
+    |
+    v
+CustomerController
+    |
+    v
+CreateCustomerCommand
+    |
+    v
+CreateCustomerCommandHandler
+    |
+    v
+CustomerRepository
+    |
+    v
+PostgreSQL
+```
+
+---
+
+### Ejemplo de flujo: consultar cliente por ID
+
+```txt
+GET /api/customers/{id}
+    |
+    v
+CustomerController
+    |
+    v
+GetCustomerByIdQuery
+    |
+    v
+GetCustomerByIdQueryHandler
+    |
+    v
+CustomerRepository
+    |
+    v
+PostgreSQL
+```
+
+---
+
+### Ejemplo de flujo: crear dirección
+
+```txt
+POST /api/customers/{customerId}/addresses
+    |
+    v
+AddressController
+    |
+    v
+CreateAddressCommand
+    |
+    v
+CreateAddressCommandHandler
+    |
+    v
+CustomerRepository valida existencia del cliente
+    |
+    v
+AddressRepository guarda la dirección
+    |
+    v
+PostgreSQL
+```
+
+---
+
 ## Patrones y buenas prácticas aplicadas
+
+### CQRS Pattern
+
+Se separaron las operaciones de escritura y lectura.
+
+- Escritura: `Command` + `CommandHandler`
+- Lectura: `Query` + `QueryHandler`
+
+Esto permite que cada caso de uso tenga una responsabilidad específica.
+
+---
 
 ### Repository Pattern
 
@@ -211,7 +422,7 @@ Ejemplo:
 Las dependencias se inyectan mediante constructores, favoreciendo el desacoplamiento entre clases.
 
 ```java
-public CustomerService(CustomerRepository customerRepository) {
+public CreateCustomerCommandHandler(CustomerRepository customerRepository) {
     this.customerRepository = customerRepository;
 }
 ```
@@ -462,57 +673,6 @@ Respuesta esperada:
 
 ---
 
-### Listar clientes
-
-```http
-GET /api/customers
-```
-
----
-
-### Obtener cliente por ID
-
-```http
-GET /api/customers/{id}
-```
-
-Ejemplo:
-
-```txt
-GET /api/customers/f4772d4c-61cd-4175-8fc5-9b564a82fadf
-```
-
----
-
-### Actualizar cliente
-
-```http
-PUT /api/customers/{id}
-Content-Type: application/json
-```
-
-Body:
-
-```json
-{
-  "firstName": "Junior Rafael",
-  "lastName": "Carpenter",
-  "documentNumber": "00112345678",
-  "email": "junior.rafael@example.com",
-  "phone": "8298056075"
-}
-```
-
----
-
-### Eliminar cliente
-
-```http
-DELETE /api/customers/{id}
-```
-
----
-
 ### Crear dirección
 
 ```http
@@ -531,44 +691,6 @@ Body:
   "postalCode": "11500",
   "isPrimary": true
 }
-```
-
----
-
-### Listar direcciones de un cliente
-
-```http
-GET /api/customers/{customerId}/addresses
-```
-
----
-
-### Actualizar dirección
-
-```http
-PUT /api/customers/{customerId}/addresses/{addressId}
-Content-Type: application/json
-```
-
-Body:
-
-```json
-{
-  "street": "Avenida Las Américas #25",
-  "city": "Santo Domingo Este",
-  "province": "Santo Domingo",
-  "country": "República Dominicana",
-  "postalCode": "11501",
-  "isPrimary": true
-}
-```
-
----
-
-### Eliminar dirección
-
-```http
-DELETE /api/customers/{customerId}/addresses/{addressId}
 ```
 
 ---
@@ -652,27 +774,26 @@ El proyecto implementa manejo centralizado de errores.
 
 ---
 
-## Flujo general de una petición
+## Pruebas
 
-Ejemplo: creación de dirección para un cliente.
+El proyecto incluye pruebas con **JUnit 5** y **MockMvc**.
 
-```txt
-Cliente HTTP
-    |
-    v
-AddressController
-    |
-    v
-AddressService
-    |
-    v
-CustomerRepository valida existencia del cliente
-    |
-    v
-AddressRepository guarda la dirección
-    |
-    v
-PostgreSQL
+Estas pruebas validan flujos principales de la API, como:
+
+- Creación de clientes.
+- Validación de campos requeridos.
+- Validación de email inválido.
+- Consulta de cliente por ID.
+- Actualización de cliente.
+- Eliminación de cliente.
+- Creación de dirección para un cliente.
+- Validación al crear dirección para un cliente inexistente.
+- Validación de campos requeridos en dirección.
+
+Ejecutar pruebas:
+
+```bash
+.\mvnw.cmd clean test
 ```
 
 ---
@@ -697,16 +818,16 @@ Ejecutar limpio:
 .\mvnw.cmd clean spring-boot:run
 ```
 
-Ver rama actual:
+Generar JAR:
 
 ```bash
-git branch
+.\mvnw.cmd clean package
 ```
 
-Subir rama actual:
+Ejecutar JAR:
 
 ```bash
-git push -u origin NOMBRE_RAMA
+java -jar target/customer-api-0.0.1-SNAPSHOT.jar
 ```
 
 ---
@@ -742,15 +863,14 @@ Algunas mejoras que podrían agregarse:
 - Paginación en listado de clientes.
 - Filtros por nombre, documento o correo.
 - Soft delete para clientes.
-- Pruebas unitarias con JUnit y Mockito.
-- Pruebas de integración.
 - Docker Compose para PostgreSQL.
 - MapStruct para mapear entidades y DTOs.
-- CQRS.
+- Mediator simple para evitar inyectar handlers directamente en controllers.
 - Seguridad con JWT.
 - Auditoría de cambios.
 - DTOs de respuesta personalizados.
 - Manejo más detallado de errores de base de datos.
+- Separar ambiente de pruebas usando base de datos dedicada o Testcontainers.
 
 ---
 
@@ -764,9 +884,11 @@ El proyecto incluye:
 - Relación uno a muchos.
 - PostgreSQL como base de datos.
 - UUID como identificador.
+- CQRS simple con Commands, Queries y Handlers.
 - Validaciones con Jakarta Validation.
 - Manejo centralizado de errores.
 - Swagger/OpenAPI.
+- Pruebas con JUnit 5 y MockMvc.
 - Arquitectura organizada por capas.
 
 ---
@@ -783,4 +905,4 @@ Backend / Full Stack Developer
 
 Esta solución fue desarrollada como prueba técnica para OrionTek, enfocada en Backend utilizando Java, Spring Boot y PostgreSQL.
 
-El objetivo fue entregar una solución funcional, organizada, clara y extensible, aplicando buenas prácticas de desarrollo backend.
+El objetivo fue entregar una solución funcional, organizada, clara y extensible, aplicando buenas prácticas de desarrollo backend, arquitectura por capas y separación de responsabilidades mediante CQRS.
